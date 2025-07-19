@@ -12,7 +12,8 @@ testcases = [
     #("simpleFunc.c", "simpleFunc.masm", "simpleFunc.bin"),
     #("simpleCondition.c", "simpleCondition.masm", "simpleCondition.bin"),
     #("simpleFor.c", "simpleFor.masm", "simpleFor.bin"),
-    ("simplePointer.c", "simplePointer.masm", "simplePointer.bin"),
+    #("simplePointer.c", "simplePointer.masm", "simplePointer.bin"),
+    ("simpleBinop.c", "simpleBinop.masm", "simpleBinop.bin"),
 ]
 
 def rel_to_subproj(path):
