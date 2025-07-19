@@ -1,55 +1,120 @@
-import subprocess
 import os
 import sys
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
-INPUT_DIR = "inputs"
-OUTPUT_DIR = "outputs"
+INPUT_DIR = "../MyTester/inputs"
+OUTPUT_DIR = "../MyTester/outputs"
 
-os.makedirs(INPUT_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+CC_PATH = "../MyCC/mycc"
+ASM_PATH = "../MyAssembler/build/myas"
+EMU_PATH = "../MyEmulator/build/myemu"
 
+# Test cases: (basename, register to check, expected value)
 testcases = [
-    #("simpleFunc.c", "simpleFunc.masm", "simpleFunc.bin"),
-    #("simpleCondition.c", "simpleCondition.masm", "simpleCondition.bin"),
-    #("simpleFor.c", "simpleFor.masm", "simpleFor.bin"),
-    #("simplePointer.c", "simplePointer.masm", "simplePointer.bin"),
-    ("simpleBinop.c", "simpleBinop.masm", "simpleBinop.bin"),
+    ("simpleFunc", "R1", 15),
+    ("simpleCondition", "R1", 328),
+    ("simpleFor", "R1", 5),
+    ("simplePointer", "R1", 5),
+    ("simpleBinop", "R1", 3),
 ]
 
-def rel_to_subproj(path):
-    return f"../MyTester/{path}"
+results = {}
 
-def run_step(cmd, stepname):
+def run_step(command, description, base):
+    """Run a subprocess and handle output/errors"""
     try:
-        print(f"\n[RUNNING] {stepname}: {' '.join(cmd)}")
-        subprocess.run(cmd, check=True)
-        print(f"[OK] {stepname}")
+        print(f"[RUNNING] {description}: {' '.join(command)}")
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        print(f"[OK] {description}")
+        if result.stdout.strip():
+            print(result.stdout)
+        if result.stderr.strip():
+            print(result.stderr)
+        return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        print(f"\n[ERROR] {stepname} failed!")
-        print(f"  Command: {' '.join(cmd)}")
+        print(f"[ERROR] {description} failed!")
+        print(f"  Command: {' '.join(command)}")
         print(f"  Return code: {e.returncode}")
-        if e.stdout:
-            print(f"  STDOUT:\n{e.stdout}")
-        if e.stderr:
-            print(f"  STDERR:\n{e.stderr}")
-        sys.exit(1)
+        print(f"  Output:\n{e.stdout}")
+        print(f"  Error:\n{e.stderr}")
+        results.setdefault(base, []).append(f"❌ {description}")
+        return None
 
-for c_src, asm_out, bin_out in testcases:
-    c_path = os.path.join(INPUT_DIR, c_src)
-    asm_path = os.path.join(OUTPUT_DIR, asm_out)
-    bin_path = os.path.join(OUTPUT_DIR, bin_out)
+def build_all():
+    """Build all subprojects before running tests"""
+    print("[INFO] Building all components...\n")
+    run_step(["make", "-C", "../MyCC"], "Build MyCC", "BUILD")
+    run_step(["make", "-C", "../MyAssembler"], "Build MyAssembler", "BUILD")
+    run_step(["make", "-C", "../MyEmulator"], "Build MyEmulator", "BUILD")
 
-    c_path_rel = rel_to_subproj(c_path)
-    asm_path_rel = rel_to_subproj(asm_path)
-    bin_path_rel = rel_to_subproj(bin_path)
+def run_test(basename, reg, expected):
+    """Run the full pipeline for a single test case"""
+    c_path = os.path.join(INPUT_DIR, basename + ".c")
+    asm_path = os.path.join(OUTPUT_DIR, basename + ".masm")
+    bin_path = os.path.join(OUTPUT_DIR, basename + ".bin")
 
-    run_step(["make", "-C", "../MyCC", "clean"], "MyCC clean")
-    run_step(["make", "-C", "../MyCC", "run-mycc", f"IN={c_path_rel}", f"OUT={asm_path_rel}"], "C to ASM")
+    c_path_rel = os.path.relpath(c_path)
+    asm_path_rel = os.path.relpath(asm_path)
+    bin_path_rel = os.path.relpath(bin_path)
 
-    run_step(["make", "-C", "../MyAssembler", "clean"], "MyAssembler clean")
-    run_step(["make", "-C", "../MyAssembler", "run-myas", f"IN={asm_path_rel}", f"OUT={bin_path_rel}"], "ASM to BIN")
+    ok = True
 
-    #run_step(["make", "-C", "../MyEmulator", "clean"], "MyEmulator clean")
-    run_step(["make", "-C", "../MyEmulator", "run-myemu", f"IN={bin_path_rel}"], "BIN to Emulate")
+    if run_step([CC_PATH, c_path_rel, asm_path_rel], f"C to ASM: {basename}.c", basename) is None:
+        ok = False
+    if run_step([ASM_PATH, asm_path_rel, bin_path_rel], f"ASM to BIN: {basename}.masm", basename) is None:
+        ok = False
 
-print("\nAll tests passed🎉")
+    if ok:
+        output = run_step([EMU_PATH, "-i", bin_path_rel, "--reg", reg], f"Run: {basename}.bin", basename)
+        if output is None:
+            ok = False
+        else:
+            try:
+                actual = int(output.splitlines()[-1])
+                if actual == expected:
+                    results.setdefault(basename, []).append(f"✅ {reg} = {actual} (expected)")
+                else:
+                    results.setdefault(basename, []).append(f"❌ {reg} = {actual}, expected {expected}")
+            except Exception as e:
+                results.setdefault(basename, []).append(f"❌ Failed to parse reg value: {e}")
+                ok = False
+
+    if ok and basename not in results:
+        results.setdefault(basename, []).append("✅ All stages passed")
+
+def run_tests(selected=None):
+    """Run selected test cases in parallel (or all if not specified)"""
+    print("\n[INFO] Running tests...\n")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    if selected:
+        matches = [t for t in testcases if t[0] == selected]
+        if not matches:
+            print(f"[ERROR] Test case '{selected}' not found in testcases.")
+            sys.exit(1)
+        to_run = matches
+    else:
+        to_run = testcases
+
+    with ThreadPoolExecutor() as executor:
+        executor.map(lambda t: run_test(*t), to_run)
+
+    print("\n====== TEST SUMMARY ======")
+    for name in sorted(results.keys()):
+        print(f"[{name}]")
+        for outcome in results[name]:
+            print(f"  {outcome}")
+    print("==========================")
+
+if __name__ == "__main__":
+    # If an argument is given, filter to that test
+    if len(sys.argv) >= 2:
+        filename = sys.argv[1]
+        base, ext = os.path.splitext(filename)
+        basename = base if ext else filename
+    else:
+        basename = None
+
+    build_all()
+    run_tests(basename)
