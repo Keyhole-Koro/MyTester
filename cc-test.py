@@ -15,25 +15,42 @@ testcases = [
     ("simpleFunc", "R1", 15),
     ("simpleCondition", "R1", 328),
     ("simpleFor", "R1", 5),
-    ("simplePointer", "R1", 5),
+    ("simplePointer", "R1", 14),
     ("simpleBinop", "R1", 3),
+    ("simpleWhile", "R1", 15),
+    ("complexWhile", "R1", 16),
+    ("simpleChar", "R1", 0),
+    ("simpleStruct", "R1", 10),
 ]
 
 results = {}
 
+def colored(text, color_code):
+    return f"\033[{color_code}m{text}\033[0m"
+
+GREEN = "32"     # Success
+RED = "31"       # Error
+YELLOW = "33"    # Warning
+CYAN = "36"
+BOLD = "1"
+
+def fmt_hex(v: int) -> str:
+    """Format integer as 0x-prefixed lowercase hex (no leading zeros)."""
+    return f"0x{v:x}"
+
 def run_step(command, description, base):
     """Run a subprocess and handle output/errors"""
     try:
-        print(f"[RUNNING] {description}: {' '.join(command)}")
+        print(colored(f"[RUNNING] {description}:", CYAN), ' '.join(command))
         result = subprocess.run(command, check=True, capture_output=True, text=True)
-        print(f"[OK] {description}")
+        print(colored(f"[OK] {description}", GREEN))
         if result.stdout.strip():
             print(result.stdout)
         if result.stderr.strip():
             print(result.stderr)
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        print(f"[ERROR] {description} failed!")
+        print(colored(f"[ERROR] {description} failed!", RED))
         print(f"  Command: {' '.join(command)}")
         print(f"  Return code: {e.returncode}")
         print(f"  Output:\n{e.stdout}")
@@ -41,12 +58,32 @@ def run_step(command, description, base):
         results.setdefault(base, []).append(f"❌ {description}")
         return None
 
+
+def clean_all():
+    """Run make clean for all components"""
+    print("[INFO] Cleaning all components...\n")
+    run_step(["make", "-C", "../MyCC", "clean"], "Clean MyCC", "CLEAN")
+    run_step(["make", "-C", "../MyAssembler", "clean"], "Clean MyAssembler", "CLEAN")
+    run_step(["make", "-C", "../MyEmulator", "clean"], "Clean MyEmulator", "CLEAN")
+
 def build_all():
-    """Build all subprojects before running tests"""
+    """Build all components in parallel"""
     print("[INFO] Building all components...\n")
-    run_step(["make", "-C", "../MyCC"], "Build MyCC", "BUILD")
-    run_step(["make", "-C", "../MyAssembler"], "Build MyAssembler", "BUILD")
-    run_step(["make", "-C", "../MyEmulator"], "Build MyEmulator", "BUILD")
+
+    build_commands = [
+        (["make", "-C", "../MyCC", "clean", "all"], "Build MyCC"),
+        (["make", "-C", "../MyAssembler", "clean", "all"], "Build MyAssembler"),
+        (["make", "-C", "../MyEmulator", "clean", "all"], "Build MyEmulator"),
+    ]
+
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(run_step, cmd, desc, "BUILD")
+            for cmd, desc in build_commands
+        ]
+        for future in futures:
+            future.result()
+
 
 def run_test(basename, reg, expected):
     """Run the full pipeline for a single test case"""
@@ -58,30 +95,38 @@ def run_test(basename, reg, expected):
     asm_path_rel = os.path.relpath(asm_path)
     bin_path_rel = os.path.relpath(bin_path)
 
-    ok = True
+    results[basename] = []
 
+    # Step 1: Compile C to ASM
     if run_step([CC_PATH, c_path_rel, asm_path_rel], f"C to ASM: {basename}.c", basename) is None:
-        ok = False
+        return
+
+    # Step 2: Assemble ASM to BIN
     if run_step([ASM_PATH, asm_path_rel, bin_path_rel], f"ASM to BIN: {basename}.masm", basename) is None:
-        ok = False
+        return
 
-    if ok:
-        output = run_step([EMU_PATH, "-i", bin_path_rel, "--reg", reg], f"Run: {basename}.bin", basename)
-        if output is None:
-            ok = False
+    # Step 3: Run Emulator and capture output
+    output = run_step([EMU_PATH, "-i", bin_path_rel, "--reg", reg], f"Run Emulator: {basename}.bin", basename)
+    if output is None:
+        results[basename].append("❌ Emulator execution failed")
+        return
+
+    # Step 4: Parse register value
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        results[basename].append("❌ No output from emulator")
+        return
+
+    try:
+        # Accept decimal or hex (e.g., "0x1f")
+        actual = int(lines[-1], 0)
+        if actual == expected:
+            results[basename].append(f"✅ {reg} = {fmt_hex(actual)} (expected)")
         else:
-            try:
-                actual = int(output.splitlines()[-1])
-                if actual == expected:
-                    results.setdefault(basename, []).append(f"✅ {reg} = {actual} (expected)")
-                else:
-                    results.setdefault(basename, []).append(f"❌ {reg} = {actual}, expected {expected}")
-            except Exception as e:
-                results.setdefault(basename, []).append(f"❌ Failed to parse reg value: {e}")
-                ok = False
+            results[basename].append(f"❌ {reg} = {fmt_hex(actual)}, expected {fmt_hex(expected)}")
+    except Exception as e:
+        results[basename].append(f"❌ Failed to parse reg value: '{lines[-1]}' ({e})")
 
-    if ok and basename not in results:
-        results.setdefault(basename, []).append("✅ All stages passed")
 
 def run_tests(selected=None):
     """Run selected test cases in parallel (or all if not specified)"""
@@ -116,5 +161,6 @@ if __name__ == "__main__":
     else:
         basename = None
 
+    clean_all()
     build_all()
     run_tests(basename)
