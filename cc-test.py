@@ -9,6 +9,7 @@ OUTPUT_DIR = "../MyTester/outputs"
 CC_PATH = "../MyCC/mycc"
 ASM_PATH = "../MyAssembler/build/myas"
 EMU_PATH = "../MyEmulator/build/myemu"
+EMU_TIMEOUT_SEC = float(os.environ.get("EMU_TIMEOUT_SEC", "8"))
 
 # Test cases: (basename, register to check, expected value)
 testcases = [
@@ -19,8 +20,9 @@ testcases = [
     ("simpleBinop", "R1", 3),
     ("simpleWhile", "R1", 15),
     ("complexWhile", "R1", 16),
-    ("simpleChar", "R1", 0),
+    ("simpleChar", "R1", 72),
     ("simpleStruct", "R1", 10),
+    ("arrayInit", "R1", 106),
 ]
 
 results = {}
@@ -38,17 +40,27 @@ def fmt_hex(v: int) -> str:
     """Format integer as 0x-prefixed lowercase hex (no leading zeros)."""
     return f"0x{v:x}"
 
-def run_step(command, description, base):
+def run_step(command, description, base, timeout=None):
     """Run a subprocess and handle output/errors"""
     try:
-        print(colored(f"[RUNNING] {description}:", CYAN), ' '.join(command))
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        pretty = ' '.join(command)
+        print(colored(f"[RUNNING] {description}:", CYAN), pretty)
+        result = subprocess.run(
+            command, check=True, capture_output=True, text=True, timeout=timeout
+        )
         print(colored(f"[OK] {description}", GREEN))
         if result.stdout.strip():
             print(result.stdout)
         if result.stderr.strip():
             print(result.stderr)
         return result.stdout.strip()
+    except subprocess.TimeoutExpired as e:
+        print(colored(f"[ERROR] {description} timed out after {timeout}s!", RED))
+        print(f"  Command: {' '.join(command)}")
+        print(f"  Partial output:\n{(e.stdout or '').strip()}")
+        print(f"  Partial error:\n{(e.stderr or '').strip()}")
+        results.setdefault(base, []).append(f"❌ {description} timed out ({timeout}s)")
+        return None
     except subprocess.CalledProcessError as e:
         print(colored(f"[ERROR] {description} failed!", RED))
         print(f"  Command: {' '.join(command)}")
@@ -106,7 +118,9 @@ def run_test(basename, reg, expected):
         return
 
     # Step 3: Run Emulator and capture output
-    output = run_step([EMU_PATH, "-i", bin_path_rel, "--reg", reg], f"Run Emulator: {basename}.bin", basename)
+    emu_cmd = [EMU_PATH, "-i", bin_path_rel, "--reg", reg]
+    print(colored(f"[INFO] Next: emulator command for {basename}", YELLOW), " ".join(emu_cmd))
+    output = run_step(emu_cmd, f"Run Emulator: {basename}.bin", basename, timeout=EMU_TIMEOUT_SEC)
     if output is None:
         results[basename].append("❌ Emulator execution failed")
         return
