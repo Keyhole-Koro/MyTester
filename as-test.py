@@ -1,13 +1,15 @@
 import os
 import sys
 import subprocess
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-INPUT_DIR = "../MyTester/inputs"
-OUTPUT_DIR = "../MyTester/outputs"
+ROOT_DIR = Path("/workspaces/MyComputer")
+INPUT_DIR = ROOT_DIR / "MyTester/inputs"
+OUTPUT_DIR = ROOT_DIR / "MyTester/outputs"
 
-ASM_PATH = "../MyAssembler/build/myas"
-EMU_PATH = "../MyEmulator/build/myemu"
+ASM_PATH = ROOT_DIR / "MyAssembler/build/myas"
+EMU_PATH = ROOT_DIR / "MyEmulator/build/myemu"
 
 # Test cases: (asm file basename, register to check, expected value)
 testcases = [
@@ -55,15 +57,15 @@ def run_step(command, description, base):
 def clean_all():
     """Run make clean for all components"""
     print("[INFO] Cleaning all components...\n")
-    run_step(["make", "-C", "../MyAssembler", "clean"], "Clean MyAssembler", "CLEAN")
-    run_step(["make", "-C", "../MyEmulator", "clean"], "Clean MyEmulator", "CLEAN")
+    run_step(["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean"], "Clean MyAssembler", "CLEAN")
+    run_step(["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean"], "Clean MyEmulator", "CLEAN")
 
 def build_all():
     """Build all components in parallel"""
     print("[INFO] Building all components...\n")
     build_commands = [
-        (["make", "-C", "../MyAssembler", "clean", "all"], "Build MyAssembler"),
-        (["make", "-C", "../MyEmulator", "clean", "all"], "Build MyEmulator"),
+        (["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean", "all"], "Build MyAssembler"),
+        (["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean", "all"], "Build MyEmulator"),
     ]
     with ThreadPoolExecutor() as executor:
         futures = [
@@ -75,20 +77,23 @@ def build_all():
 
 def run_test(basename, reg, expected):
     """Run the test pipeline: ASM -> BIN -> Emulator"""
-    asm_path = os.path.join(INPUT_DIR, basename + ".masm")
-    bin_path = os.path.join(OUTPUT_DIR, basename + ".bin")
-
-    asm_rel = os.path.relpath(asm_path)
-    bin_rel = os.path.relpath(bin_path)
+    asm_path = INPUT_DIR / f"{basename}.masm"
+    bin_path = OUTPUT_DIR / f"{basename}.bin"
 
     results[basename] = []
 
     # Step 1: Assemble ASM -> BIN
-    if run_step([ASM_PATH, asm_rel, bin_rel], f"ASM to BIN: {basename}.masm", basename) is None:
+    if run_step([str(ASM_PATH), str(asm_path), str(bin_path)], f"ASM to BIN: {basename}.masm", basename) is None:
         return
 
+    # Move generated hex file to output directory
+    hex_file = f"{basename}.txt"
+    hex_src = Path(hex_file)
+    if hex_src.exists():
+        os.replace(hex_src, OUTPUT_DIR / hex_file)
+
     # Step 2: Run Emulator
-    output = run_step([EMU_PATH, "-i", bin_rel, "--reg", reg], f"Run Emulator: {basename}.bin", basename)
+    output = run_step([str(EMU_PATH), "-i", str(bin_path), "--reg", reg], f"Run Emulator: {basename}.bin", basename)
     if output is None:
         results[basename].append("❌ Emulator execution failed")
         return
@@ -110,7 +115,7 @@ def run_test(basename, reg, expected):
 def run_tests(selected=None):
     """Run all tests or a specific one if selected"""
     print("\n[INFO] Running tests...\n")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if selected:
         matches = [t for t in testcases if t[0] == selected]
@@ -121,8 +126,9 @@ def run_tests(selected=None):
     else:
         to_run = testcases
 
-    with ThreadPoolExecutor() as executor:
-        executor.map(lambda t: run_test(*t), to_run)
+    # Sequential execution keeps emulator stdout manageable and avoids timeouts.
+    for t in to_run:
+        run_test(*t)
 
     print("\n====== TEST SUMMARY ======")
     for name in sorted(results.keys()):

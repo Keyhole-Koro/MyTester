@@ -1,14 +1,17 @@
 import os
 import sys
+import shutil
 import subprocess
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-INPUT_DIR = "../MyTester/inputs"
-OUTPUT_DIR = "../MyTester/outputs"
+ROOT_DIR = Path("/workspaces/MyComputer")
+INPUT_DIR = ROOT_DIR / "MyTester/inputs"
+OUTPUT_DIR = ROOT_DIR / "MyTester/outputs"
 
-CC_PATH = "../MyCC/mycc"
-ASM_PATH = "../MyAssembler/build/myas"
-EMU_PATH = "../MyEmulator/build/myemu"
+CC_PATH = ROOT_DIR / "MyCC/mycc"
+ASM_PATH = ROOT_DIR / "MyAssembler/build/myas"
+EMU_PATH = ROOT_DIR / "MyEmulator/build/myemu"
 EMU_TIMEOUT_SEC = float(os.environ.get("EMU_TIMEOUT_SEC", "8"))
 
 # Test cases: (basename, register to check, expected value)
@@ -23,6 +26,9 @@ testcases = [
     ("simpleChar", "R1", 72),
     ("simpleStruct", "R1", 10),
     ("arrayInit", "R1", 106),
+    ("multiArray", "R1", 6),
+    ("arraySizeof", "R1", 24),
+    ("testDoWhile", "R1", 10),
 ]
 
 results = {}
@@ -74,18 +80,18 @@ def run_step(command, description, base, timeout=None):
 def clean_all():
     """Run make clean for all components"""
     print("[INFO] Cleaning all components...\n")
-    run_step(["make", "-C", "../MyCC", "clean"], "Clean MyCC", "CLEAN")
-    run_step(["make", "-C", "../MyAssembler", "clean"], "Clean MyAssembler", "CLEAN")
-    run_step(["make", "-C", "../MyEmulator", "clean"], "Clean MyEmulator", "CLEAN")
+    run_step(["make", "-C", str(ROOT_DIR / "MyCC"), "clean"], "Clean MyCC", "CLEAN")
+    run_step(["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean"], "Clean MyAssembler", "CLEAN")
+    run_step(["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean"], "Clean MyEmulator", "CLEAN")
 
 def build_all():
     """Build all components in parallel"""
     print("[INFO] Building all components...\n")
 
     build_commands = [
-        (["make", "-C", "../MyCC", "clean", "all"], "Build MyCC"),
-        (["make", "-C", "../MyAssembler", "clean", "all"], "Build MyAssembler"),
-        (["make", "-C", "../MyEmulator", "clean", "all"], "Build MyEmulator"),
+        (["make", "-C", str(ROOT_DIR / "MyCC"), "clean", "all"], "Build MyCC"),
+        (["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean", "all"], "Build MyAssembler"),
+        (["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean", "all"], "Build MyEmulator"),
     ]
 
     with ThreadPoolExecutor() as executor:
@@ -99,28 +105,28 @@ def build_all():
 
 def run_test(basename, reg, expected):
     """Run the full pipeline for a single test case"""
-    c_path = os.path.join(INPUT_DIR, basename + ".c")
-    asm_path = os.path.join(OUTPUT_DIR, basename + ".masm")
-    bin_path = os.path.join(OUTPUT_DIR, basename + ".bin")
-
-    c_path_rel = os.path.relpath(c_path)
-    asm_path_rel = os.path.relpath(asm_path)
-    bin_path_rel = os.path.relpath(bin_path)
+    c_path = INPUT_DIR / f"{basename}.c"
+    asm_path = OUTPUT_DIR / f"{basename}.masm"
+    bin_path = OUTPUT_DIR / f"{basename}.bin"
 
     results[basename] = []
 
     # Step 1: Compile C to ASM
-    if run_step([CC_PATH, c_path_rel, asm_path_rel], f"C to ASM: {basename}.c", basename) is None:
+    if run_step([str(CC_PATH), str(c_path), str(asm_path)], f"C to ASM: {basename}.c", basename) is None:
         return
 
     # Step 2: Assemble ASM to BIN
-    if run_step([ASM_PATH, asm_path_rel, bin_path_rel], f"ASM to BIN: {basename}.masm", basename) is None:
+    if run_step([str(ASM_PATH), str(asm_path), str(bin_path)], f"ASM to BIN: {basename}.masm", basename) is None:
         return
 
     # Step 3: Run Emulator and capture output
-    emu_cmd = [EMU_PATH, "-i", bin_path_rel, "--reg", reg]
+    emu_cmd = [str(EMU_PATH), "-i", str(bin_path), "--reg", reg]
     print(colored(f"[INFO] Next: emulator command for {basename}", YELLOW), " ".join(emu_cmd))
     output = run_step(emu_cmd, f"Run Emulator: {basename}.bin", basename, timeout=EMU_TIMEOUT_SEC)
+
+    if os.path.exists("memory_dump.txt"):
+        shutil.move("memory_dump.txt", os.path.join(OUTPUT_DIR, "memory_dump.txt"))
+
     if output is None:
         results[basename].append("❌ Emulator execution failed")
         return
@@ -145,7 +151,7 @@ def run_test(basename, reg, expected):
 def run_tests(selected=None):
     """Run selected test cases in parallel (or all if not specified)"""
     print("\n[INFO] Running tests...\n")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if selected:
         matches = [t for t in testcases if t[0] == selected]
@@ -156,8 +162,9 @@ def run_tests(selected=None):
     else:
         to_run = testcases
 
-    with ThreadPoolExecutor() as executor:
-        executor.map(lambda t: run_test(*t), to_run)
+    # Run sequentially to avoid stdout buffering/timeouts when many emulators run.
+    for t in to_run:
+        run_test(*t)
 
     print("\n====== TEST SUMMARY ======")
     for name in sorted(results.keys()):
