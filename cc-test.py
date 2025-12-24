@@ -29,6 +29,8 @@ testcases = [
     ("multiArray", "R1", 6),
     ("arraySizeof", "R1", 24),
     ("testDoWhile", "R1", 10),
+    ("testBitwise", "R1", 29),
+    ("testOps", "R1", 10),
 ]
 
 results = {}
