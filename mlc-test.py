@@ -9,28 +9,35 @@ ROOT_DIR = Path("/workspaces/MyComputer")
 INPUT_DIR = ROOT_DIR / "MyTester/inputs"
 OUTPUT_DIR = ROOT_DIR / "MyTester/outputs"
 
-CC_PATH = ROOT_DIR / "MyCC/mycc"
+CC_PATH = ROOT_DIR / "MyLangCompiler/mlc"
 ASM_PATH = ROOT_DIR / "MyAssembler/build/myas"
+LINKER_PATH = ROOT_DIR / "MyLangLinker/mllinker"
 EMU_PATH = ROOT_DIR / "MyEmulator/build/myemu"
 EMU_TIMEOUT_SEC = float(os.environ.get("EMU_TIMEOUT_SEC", "8"))
 
-# Test cases: (basename, register to check, expected value)
+# Test cases: (basename, sources list, register to check, expected value)
 testcases = [
-    ("simpleFunc", "R1", 15),
-    ("simpleCondition", "R1", 328),
-    ("simpleFor", "R1", 5),
-    ("simplePointer", "R1", 14),
-    ("simpleBinop", "R1", 3),
-    ("simpleWhile", "R1", 15),
-    ("complexWhile", "R1", 16),
-    ("simpleChar", "R1", 72),
-    ("simpleStruct", "R1", 10),
-    ("arrayInit", "R1", 106),
-    ("multiArray", "R1", 6),
-    ("arraySizeof", "R1", 24),
-    ("testDoWhile", "R1", 10),
-    ("testBitwise", "R1", 29),
-    ("testOps", "R1", 10),
+    ("simpleFunc", ["simpleFunc.ml"], "R1", 15),
+    ("simpleCondition", ["simpleCondition.ml"], "R1", 328),
+    ("simpleFor", ["simpleFor.ml"], "R1", 5),
+    ("simplePointer", ["simplePointer.ml"], "R1", 14),
+    ("simpleBinop", ["simpleBinop.ml"], "R1", 3),
+    ("simpleWhile", ["simpleWhile.ml"], "R1", 15),
+    ("complexWhile", ["complexWhile.ml"], "R1", 16),
+    ("simpleChar", ["simpleChar.ml"], "R1", 72),
+    ("simpleStruct", ["simpleStruct.ml"], "R1", 10),
+    ("arrayInit", ["arrayInit.ml"], "R1", 106),
+    ("multiArray", ["multiArray.ml"], "R1", 6),
+    ("arraySizeof", ["arraySizeof.ml"], "R1", 24),
+    ("testDoWhile", ["testDoWhile.ml"], "R1", 10),
+    ("testBitwise", ["testBitwise.ml"], "R1", 29),
+    ("testOps", ["testOps.ml"], "R1", 10),
+    ("testTernary", ["testTernary.ml"], "R1", 8),
+    ("testTypedef", ["testTypedef.ml"], "R1", 1),
+    ("longProgram", ["longProgram.ml"], "R1", 77),
+    ("complex_ops", ["complex_ops.ml"], "R1", 188),
+    ("multiInclude", ["multiInclude.ml", "multiInclude_part1.ml", "multiInclude_part2.ml"], "R1", 11),
+    ("multiInclude_complex", ["multiInclude_complex.ml", "multiInclude_midA.ml", "multiInclude_midB.ml", "multiInclude_shared.ml"], "R1", 21),
 ]
 
 results = {}
@@ -47,6 +54,10 @@ BOLD = "1"
 def fmt_hex(v: int) -> str:
     """Format integer as 0x-prefixed lowercase hex (no leading zeros)."""
     return f"0x{v:x}"
+
+def has_failure(outcomes):
+    """Return True if any outcome marks a failure."""
+    return any(msg.startswith("❌") for msg in outcomes)
 
 def run_step(command, description, base, timeout=None):
     """Run a subprocess and handle output/errors"""
@@ -78,12 +89,12 @@ def run_step(command, description, base, timeout=None):
         results.setdefault(base, []).append(f"❌ {description}")
         return None
 
-
 def clean_all():
     """Run make clean for all components"""
     print("[INFO] Cleaning all components...\n")
-    run_step(["make", "-C", str(ROOT_DIR / "MyCC"), "clean"], "Clean MyCC", "CLEAN")
+    run_step(["make", "-C", str(ROOT_DIR / "MyLangCompiler"), "clean"], "Clean MyLangCompiler", "CLEAN")
     run_step(["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean"], "Clean MyAssembler", "CLEAN")
+    run_step(["make", "-C", str(ROOT_DIR / "MyLangLinker"), "clean"], "Clean MyLangLinker", "CLEAN")
     run_step(["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean"], "Clean MyEmulator", "CLEAN")
 
 def build_all():
@@ -91,8 +102,9 @@ def build_all():
     print("[INFO] Building all components...\n")
 
     build_commands = [
-        (["make", "-C", str(ROOT_DIR / "MyCC"), "clean", "all"], "Build MyCC"),
+        (["make", "-C", str(ROOT_DIR / "MyLangCompiler"), "clean", "all"], "Build MyLangCompiler"),
         (["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean", "all"], "Build MyAssembler"),
+        (["make", "-C", str(ROOT_DIR / "MyLangLinker"), "clean", "all"], "Build MyLangLinker"),
         (["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean", "all"], "Build MyEmulator"),
     ]
 
@@ -105,23 +117,32 @@ def build_all():
             future.result()
 
 
-def run_test(basename, reg, expected):
-    """Run the full pipeline for a single test case"""
-    c_path = INPUT_DIR / f"{basename}.c"
-    asm_path = OUTPUT_DIR / f"{basename}.masm"
+def run_test(basename, sources, reg, expected):
+    """Run the full pipeline for a single test case: per-source CC/AS -> Linker -> Emulator"""
+    obj_paths = []
     bin_path = OUTPUT_DIR / f"{basename}.bin"
 
     results[basename] = []
 
-    # Step 1: Compile C to ASM
-    if run_step([str(CC_PATH), str(c_path), str(asm_path)], f"C to ASM: {basename}.c", basename) is None:
+    for src in sources:
+        src_path = INPUT_DIR / src
+        stem = src_path.stem
+        asm_path = OUTPUT_DIR / f"{basename}__{stem}.masm"
+        bin_prelink_path = OUTPUT_DIR / f"{basename}__{stem}.prelink.bin"
+        obj_path = OUTPUT_DIR / f"{basename}__{stem}.obj"
+
+        if run_step([str(CC_PATH), str(src_path), str(asm_path)], f"C to ASM: {src}", basename) is None:
+            return
+
+        if run_step([str(ASM_PATH), str(asm_path), str(bin_prelink_path), "--obj", str(obj_path)], f"ASM to OBJ: {src}", basename) is None:
+            return
+
+        obj_paths.append(str(obj_path))
+
+    if run_step([str(LINKER_PATH), str(bin_path)] + obj_paths, f"Link OBJ to BIN: {basename}", basename) is None:
         return
 
-    # Step 2: Assemble ASM to BIN
-    if run_step([str(ASM_PATH), str(asm_path), str(bin_path)], f"ASM to BIN: {basename}.masm", basename) is None:
-        return
-
-    # Step 3: Run Emulator and capture output
+    # Run Emulator and capture output
     emu_cmd = [str(EMU_PATH), "-i", str(bin_path), "--reg", reg]
     print(colored(f"[INFO] Next: emulator command for {basename}", YELLOW), " ".join(emu_cmd))
     output = run_step(emu_cmd, f"Run Emulator: {basename}.bin", basename, timeout=EMU_TIMEOUT_SEC)
@@ -169,10 +190,27 @@ def run_tests(selected=None):
         run_test(*t)
 
     print("\n====== TEST SUMMARY ======")
+    failures = []
+    successes = []
+
     for name in sorted(results.keys()):
+        bucket = failures if has_failure(results[name]) else successes
+        bucket.append((name, results[name]))
+
+    for name, outcomes in successes:
         print(f"[{name}]")
-        for outcome in results[name]:
+        for outcome in outcomes:
             print(f"  {outcome}")
+
+    if failures:
+        if successes:
+            print()
+        print("-- Failures (bottom) --")
+        for name, outcomes in failures:
+            print(f"[{name}]")
+            for outcome in outcomes:
+                print(f"  {outcome}")
+        print(f"Failed cases: {', '.join(name for name, _ in failures)}")
     print("==========================")
 
 if __name__ == "__main__":

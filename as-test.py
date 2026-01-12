@@ -86,11 +86,8 @@ def run_test(basename, reg, expected):
     if run_step([str(ASM_PATH), str(asm_path), str(bin_path)], f"ASM to BIN: {basename}.masm", basename) is None:
         return
 
-    # Move generated hex file to output directory
-    hex_file = f"{basename}.txt"
-    hex_src = Path(hex_file)
-    if hex_src.exists():
-        os.replace(hex_src, OUTPUT_DIR / hex_file)
+    # Hex file output path
+    hex_file = OUTPUT_DIR / f"{basename}.txt"
 
     # Step 2: Run Emulator
     output = run_step([str(EMU_PATH), "-i", str(bin_path), "--reg", reg], f"Run Emulator: {basename}.bin", basename)
