@@ -11,7 +11,7 @@ OUTPUT_DIR = ROOT_DIR / "MyTester/outputs"
 
 CC_PATH = ROOT_DIR / "MyLangCompiler/mlc"
 ASM_PATH = ROOT_DIR / "MyAssembler/build/myas"
-LINKER_PATH = ROOT_DIR / "MyLangLinker/mllinker"
+LINKER_PATH = ROOT_DIR / "MyLinker/mllinker"
 EMU_PATH = ROOT_DIR / "MyEmulator/build/myemu"
 EMU_TIMEOUT_SEC = float(os.environ.get("EMU_TIMEOUT_SEC", "8"))
 
@@ -38,6 +38,7 @@ testcases = [
     ("complex_ops", ["complex_ops.ml"], "R1", 188),
     ("multiInclude", ["multiInclude.ml", "multiInclude_part1.ml", "multiInclude_part2.ml"], "R1", 11),
     ("multiInclude_complex", ["multiInclude_complex.ml", "multiInclude_midA.ml", "multiInclude_midB.ml", "multiInclude_shared.ml"], "R1", 21),
+    ("testStmtExpr", ["testStmtExpr.ml"], "R1", 5),
 ]
 
 results = {}
@@ -61,40 +62,60 @@ def has_failure(outcomes):
 
 def run_step(command, description, base, timeout=None):
     """Run a subprocess and handle output/errors"""
+    log_file_path = OUTPUT_DIR / f"{base}.log"
     try:
         pretty = ' '.join(command)
-        print(colored(f"[RUNNING] {description}:", CYAN), pretty)
-        result = subprocess.run(
-            command, check=True, capture_output=True, text=True, timeout=timeout
-        )
+        print(colored(f"[RUNNING] {description}", CYAN)) # Minimal output to terminal
+        
+        # Append to log file
+        with open(log_file_path, "a") as log_file:
+            log_file.write(f"\n--- {description} ---\nCommand: {pretty}\n")
+            
+            result = subprocess.run(
+                command, check=True, capture_output=True, text=True, timeout=timeout
+            )
+            
+            log_file.write(f"STDOUT:\n{result.stdout}\n")
+            log_file.write(f"STDERR:\n{result.stderr}\n")
+
         print(colored(f"[OK] {description}", GREEN))
-        if result.stdout.strip():
-            print(result.stdout)
-        if result.stderr.strip():
-            print(result.stderr)
         return result.stdout.strip()
+
     except subprocess.TimeoutExpired as e:
         print(colored(f"[ERROR] {description} timed out after {timeout}s!", RED))
-        print(f"  Command: {' '.join(command)}")
-        print(f"  Partial output:\n{(e.stdout or '').strip()}")
-        print(f"  Partial error:\n{(e.stderr or '').strip()}")
+        # Log failure details
+        with open(log_file_path, "a") as log_file:
+             log_file.write(f"\n[TIMEOUT] {description}\n")
+             log_file.write(f"Partial STDOUT:\n{e.stdout}\n")
+             log_file.write(f"Partial STDERR:\n{e.stderr}\n")
+
+        print(f"  See {log_file_path} for details.")
         results.setdefault(base, []).append(f"❌ {description} timed out ({timeout}s)")
         return None
+
     except subprocess.CalledProcessError as e:
         print(colored(f"[ERROR] {description} failed!", RED))
-        print(f"  Command: {' '.join(command)}")
-        print(f"  Return code: {e.returncode}")
-        print(f"  Output:\n{e.stdout}")
-        print(f"  Error:\n{e.stderr}")
+        
+        with open(log_file_path, "a") as log_file:
+             log_file.write(f"\n[FAILED] {description}\n")
+             log_file.write(f"Return Code: {e.returncode}\n")
+             log_file.write(f"STDOUT:\n{e.stdout}\n")
+             log_file.write(f"STDERR:\n{e.stderr}\n")
+             
+        print(f"  See {log_file_path} for details.")
         results.setdefault(base, []).append(f"❌ {description}")
         return None
+    except Exception as e:
+         print(colored(f"[ERROR] {description} unexpected error: {e}", RED))
+         results.setdefault(base, []).append(f"❌ {description} error: {e}")
+         return None
 
 def clean_all():
     """Run make clean for all components"""
     print("[INFO] Cleaning all components...\n")
     run_step(["make", "-C", str(ROOT_DIR / "MyLangCompiler"), "clean"], "Clean MyLangCompiler", "CLEAN")
     run_step(["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean"], "Clean MyAssembler", "CLEAN")
-    run_step(["make", "-C", str(ROOT_DIR / "MyLangLinker"), "clean"], "Clean MyLangLinker", "CLEAN")
+    run_step(["make", "-C", str(ROOT_DIR / "MyLinker"), "clean"], "Clean MyLinker", "CLEAN")
     run_step(["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean"], "Clean MyEmulator", "CLEAN")
 
 def build_all():
@@ -102,19 +123,21 @@ def build_all():
     print("[INFO] Building all components...\n")
 
     build_commands = [
-        (["make", "-C", str(ROOT_DIR / "MyLangCompiler"), "clean", "all"], "Build MyLangCompiler"),
-        (["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean", "all"], "Build MyAssembler"),
-        (["make", "-C", str(ROOT_DIR / "MyLangLinker"), "clean", "all"], "Build MyLangLinker"),
-        (["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean", "all"], "Build MyEmulator"),
+        (["make", "-C", str(ROOT_DIR / "MyLangCompiler"), "all"], "Build MyLangCompiler"),
+        (["make", "-C", str(ROOT_DIR / "MyAssembler"), "all"], "Build MyAssembler"),
+        (["make", "-C", str(ROOT_DIR / "MyLinker"), "all"], "Build MyLinker"),
+        (["make", "-C", str(ROOT_DIR / "MyEmulator"), "all"], "Build MyEmulator"),
     ]
 
     with ThreadPoolExecutor() as executor:
-        futures = [
-            executor.submit(run_step, cmd, desc, "BUILD")
+        futures = {
+            executor.submit(run_step, cmd, desc, "BUILD"): desc
             for cmd, desc in build_commands
-        ]
+        }
         for future in futures:
-            future.result()
+            if future.result() is None:
+                print(f"[FATAL] {futures[future]} failed. Exiting.")
+                sys.exit(1)
 
 
 def run_test(basename, sources, reg, expected):
@@ -222,6 +245,6 @@ if __name__ == "__main__":
     else:
         basename = None
 
-    clean_all()
+    # clean_all() # Disabled to allow incremental builds
     build_all()
     run_tests(basename)
