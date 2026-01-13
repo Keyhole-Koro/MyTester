@@ -1,5 +1,6 @@
-int shared_add_two(int x);
+package midA;
+import shared;
 
-int midA(int x) {
-return shared_add_two(x) * 2;
+export int midA(int x) {
+    return shared.shared_add_two(x) * 2;
 }

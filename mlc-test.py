@@ -39,6 +39,12 @@ testcases = [
     ("multiInclude", ["multiInclude.ml", "multiInclude_part1.ml", "multiInclude_part2.ml"], "R1", 11),
     ("multiInclude_complex", ["multiInclude_complex.ml", "multiInclude_midA.ml", "multiInclude_midB.ml", "multiInclude_shared.ml"], "R1", 21),
     ("testStmtExpr", ["testStmtExpr.ml"], "R1", 5),
+    ("testCaseExpr", ["testCaseExpr.ml"], "R1", 30),
+    ("testCaseStructArrow", ["testCaseStructArrow.ml"], "R1", 42),
+    ("testCaseComplex", ["testCaseComplex.ml"], "R1", 400),
+    ("testCaseExprRef", ["testCaseExprRef.ml"], "R1", 100),
+    ("nestedCaseArrow", ["nestedCaseArrow.ml"], "R1", 10),
+    ("packageSample", ["pkg_main.ml", "pkg_math.ml"], "R1", 20),
 ]
 
 results = {}
@@ -60,9 +66,17 @@ def has_failure(outcomes):
     """Return True if any outcome marks a failure."""
     return any(msg.startswith("❌") for msg in outcomes)
 
-def run_step(command, description, base, timeout=None):
+def case_dir(base):
+    """Return (and create) the output subdir for this base/test name."""
+    path = OUTPUT_DIR / base
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def run_step(command, description, base, timeout=None, out_dir=None):
     """Run a subprocess and handle output/errors"""
-    log_file_path = OUTPUT_DIR / f"{base}.log"
+    log_root = out_dir if out_dir else OUTPUT_DIR
+    log_root.mkdir(parents=True, exist_ok=True)
+    log_file_path = log_root / f"{base}.log"
     try:
         pretty = ' '.join(command)
         print(colored(f"[RUNNING] {description}", CYAN)) # Minimal output to terminal
@@ -113,10 +127,11 @@ def run_step(command, description, base, timeout=None):
 def clean_all():
     """Run make clean for all components"""
     print("[INFO] Cleaning all components...\n")
-    run_step(["make", "-C", str(ROOT_DIR / "MyLangCompiler"), "clean"], "Clean MyLangCompiler", "CLEAN")
-    run_step(["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean"], "Clean MyAssembler", "CLEAN")
-    run_step(["make", "-C", str(ROOT_DIR / "MyLinker"), "clean"], "Clean MyLinker", "CLEAN")
-    run_step(["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean"], "Clean MyEmulator", "CLEAN")
+    clean_dir = case_dir("CLEAN")
+    run_step(["make", "-C", str(ROOT_DIR / "MyLangCompiler"), "clean"], "Clean MyLangCompiler", "CLEAN", out_dir=clean_dir)
+    run_step(["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean"], "Clean MyAssembler", "CLEAN", out_dir=clean_dir)
+    run_step(["make", "-C", str(ROOT_DIR / "MyLinker"), "clean"], "Clean MyLinker", "CLEAN", out_dir=clean_dir)
+    run_step(["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean"], "Clean MyEmulator", "CLEAN", out_dir=clean_dir)
 
 def build_all():
     """Build all components in parallel"""
@@ -131,7 +146,7 @@ def build_all():
 
     with ThreadPoolExecutor() as executor:
         futures = {
-            executor.submit(run_step, cmd, desc, "BUILD"): desc
+            executor.submit(run_step, cmd, desc, "BUILD", out_dir=case_dir("BUILD")): desc
             for cmd, desc in build_commands
         }
         for future in futures:
@@ -142,36 +157,37 @@ def build_all():
 
 def run_test(basename, sources, reg, expected):
     """Run the full pipeline for a single test case: per-source CC/AS -> Linker -> Emulator"""
+    test_dir = case_dir(basename)
     obj_paths = []
-    bin_path = OUTPUT_DIR / f"{basename}.bin"
+    bin_path = test_dir / f"{basename}.bin"
 
     results[basename] = []
 
     for src in sources:
         src_path = INPUT_DIR / src
         stem = src_path.stem
-        asm_path = OUTPUT_DIR / f"{basename}__{stem}.masm"
-        bin_prelink_path = OUTPUT_DIR / f"{basename}__{stem}.prelink.bin"
-        obj_path = OUTPUT_DIR / f"{basename}__{stem}.obj"
+        asm_path = test_dir / f"{basename}__{stem}.masm"
+        bin_prelink_path = test_dir / f"{basename}__{stem}.prelink.bin"
+        obj_path = test_dir / f"{basename}__{stem}.obj"
 
-        if run_step([str(CC_PATH), str(src_path), str(asm_path)], f"C to ASM: {src}", basename) is None:
+        if run_step([str(CC_PATH), str(src_path), str(asm_path)], f"C to ASM: {src}", basename, out_dir=test_dir) is None:
             return
 
-        if run_step([str(ASM_PATH), str(asm_path), str(bin_prelink_path), "--obj", str(obj_path)], f"ASM to OBJ: {src}", basename) is None:
+        if run_step([str(ASM_PATH), str(asm_path), str(bin_prelink_path), "--obj", str(obj_path)], f"ASM to OBJ: {src}", basename, out_dir=test_dir) is None:
             return
 
         obj_paths.append(str(obj_path))
 
-    if run_step([str(LINKER_PATH), str(bin_path)] + obj_paths, f"Link OBJ to BIN: {basename}", basename) is None:
+    if run_step([str(LINKER_PATH), str(bin_path)] + obj_paths, f"Link OBJ to BIN: {basename}", basename, out_dir=test_dir) is None:
         return
 
     # Run Emulator and capture output
     emu_cmd = [str(EMU_PATH), "-i", str(bin_path), "--reg", reg]
     print(colored(f"[INFO] Next: emulator command for {basename}", YELLOW), " ".join(emu_cmd))
-    output = run_step(emu_cmd, f"Run Emulator: {basename}.bin", basename, timeout=EMU_TIMEOUT_SEC)
+    output = run_step(emu_cmd, f"Run Emulator: {basename}.bin", basename, timeout=EMU_TIMEOUT_SEC, out_dir=test_dir)
 
     if os.path.exists("memory_dump.txt"):
-        shutil.move("memory_dump.txt", os.path.join(OUTPUT_DIR, "memory_dump.txt"))
+        shutil.move("memory_dump.txt", os.path.join(test_dir, "memory_dump.txt"))
 
     if output is None:
         results[basename].append("❌ Emulator execution failed")
