@@ -45,6 +45,9 @@ testcases = [
     ("testCaseExprRef", ["testCaseExprRef.ml"], "R1", 100),
     ("nestedCaseArrow", ["nestedCaseArrow.ml"], "R1", 10),
     ("packageSample", ["pkg_main.ml", "pkg_math.ml"], "R1", 20),
+    ("functionLiteral", ["functionLiteral.ml"], "R1", 10),
+    ("localFunctionLiteral", ["localFunctionLiteral.ml"], "R1", 10),
+    ("nestedFunctionLiteral", ["nestedFunctionLiteral.ml"], "R1", 6),
 ]
 
 results = {}
@@ -159,7 +162,7 @@ def run_test(basename, sources, reg, expected):
     """Run the full pipeline for a single test case: per-source CC/AS -> Linker -> Emulator"""
     test_dir = case_dir(basename)
     obj_paths = []
-    bin_path = test_dir / f"{basename}.bin"
+    bin_path = test_dir / f"{basename}.mbin"
 
     results[basename] = []
 
@@ -167,8 +170,8 @@ def run_test(basename, sources, reg, expected):
         src_path = INPUT_DIR / src
         stem = src_path.stem
         asm_path = test_dir / f"{basename}__{stem}.masm"
-        bin_prelink_path = test_dir / f"{basename}__{stem}.prelink.bin"
-        obj_path = test_dir / f"{basename}__{stem}.obj"
+        bin_prelink_path = test_dir / f"{basename}__{stem}.prelink.mbin"
+        obj_path = test_dir / f"{basename}__{stem}.mobj"
 
         if run_step([str(CC_PATH), str(src_path), str(asm_path)], f"C to ASM: {src}", basename, out_dir=test_dir) is None:
             return
@@ -178,13 +181,13 @@ def run_test(basename, sources, reg, expected):
 
         obj_paths.append(str(obj_path))
 
-    if run_step([str(LINKER_PATH), str(bin_path)] + obj_paths, f"Link OBJ to BIN: {basename}", basename, out_dir=test_dir) is None:
+    if run_step([str(LINKER_PATH), str(bin_path)] + obj_paths, f"Link MOBJ to MBIN: {basename}", basename, out_dir=test_dir) is None:
         return
 
     # Run Emulator and capture output
     emu_cmd = [str(EMU_PATH), "-i", str(bin_path), "--reg", reg]
     print(colored(f"[INFO] Next: emulator command for {basename}", YELLOW), " ".join(emu_cmd))
-    output = run_step(emu_cmd, f"Run Emulator: {basename}.bin", basename, timeout=EMU_TIMEOUT_SEC, out_dir=test_dir)
+    output = run_step(emu_cmd, f"Run Emulator: {basename}.mbin", basename, timeout=EMU_TIMEOUT_SEC, out_dir=test_dir)
 
     if os.path.exists("memory_dump.txt"):
         shutil.move("memory_dump.txt", os.path.join(test_dir, "memory_dump.txt"))
