@@ -48,6 +48,9 @@ testcases = [
     ("functionLiteral", ["functionLiteral.ml"], "R1", 10),
     ("localFunctionLiteral", ["localFunctionLiteral.ml"], "R1", 10),
     ("nestedFunctionLiteral", ["nestedFunctionLiteral.ml"], "R1", 6),
+    ("globalInit", ["globalInit.ml"], "R1", 42),
+    ("testGlobalScalar", ["testGlobalScalar.ml"], "R1", 105),
+    ("globalUninit", ["globalUninit.ml"], "R1", 83),
 ]
 
 results = {}
