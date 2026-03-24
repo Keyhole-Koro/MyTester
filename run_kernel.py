@@ -70,8 +70,6 @@ def main():
     # Sources
     kernel_ml = kernel_dir / "src" / "kernel_main.ml"
     stub_masm = kernel_dir / "asm" / "stub.masm"
-    boot_rom_src = MYEMULATOR_DIR / "examples" / "boot_rom.masm"
-    boot_rom_bin = MYEMULATOR_DIR / "build" / "os" / "boot_rom.mbin"
 
     linked_bin = build_dir / "kernel_linked.mbin"
 
@@ -85,17 +83,12 @@ def main():
         "--build-dir", build_dir
     ], cwd=repo, description="build kernel image")
 
-    # Ensure ROM image exists
-    boot_rom_bin.parent.mkdir(parents=True, exist_ok=True)
-    if not boot_rom_bin.exists():
-        run([myas, boot_rom_src, boot_rom_bin], cwd=repo, description="build boot ROM")
-
     if args.no_run:
         status_line("DONE", "build complete; skipped emulator run", GREEN)
         return
 
     # Run emulator
-    run([myemu, "--rom", boot_rom_bin, "--ram", linked_bin], cwd=repo, description="run emulator")
+    run([myemu, "-i", linked_bin], cwd=repo, description="run emulator")
     status_line("DONE", "kernel run complete; see memory_dump.txt for RAM snapshot", GREEN)
 
 
