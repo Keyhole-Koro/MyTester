@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import subprocess
+import argparse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
@@ -65,6 +66,7 @@ testcases = [
 ]
 
 results = {}
+VERBOSE = False
 
 def colored(text, color_code):
     return f"\033[{color_code}m{text}\033[0m"
@@ -83,6 +85,9 @@ def has_failure(outcomes):
     """Return True if any outcome marks a failure."""
     return any(msg.startswith("❌") for msg in outcomes)
 
+def status_line(label, message, color=CYAN):
+    print(colored(f"[{label}]", color), message)
+
 def case_dir(base):
     """Return (and create) the output subdir for this base/test name."""
     path = OUTPUT_DIR / base
@@ -96,7 +101,8 @@ def run_step(command, description, base, timeout=None, out_dir=None):
     log_file_path = log_root / f"{base}.log"
     try:
         pretty = ' '.join(command)
-        print(colored(f"[RUNNING] {description}", CYAN)) # Minimal output to terminal
+        if VERBOSE:
+            status_line("RUN", description, CYAN)
         
         # Append to log file
         with open(log_file_path, "a") as log_file:
@@ -109,41 +115,38 @@ def run_step(command, description, base, timeout=None, out_dir=None):
             log_file.write(f"STDOUT:\n{result.stdout}\n")
             log_file.write(f"STDERR:\n{result.stderr}\n")
 
-        print(colored(f"[OK] {description}", GREEN))
+        if VERBOSE:
+            status_line("OK", description, GREEN)
         return result.stdout.strip()
 
     except subprocess.TimeoutExpired as e:
-        print(colored(f"[ERROR] {description} timed out after {timeout}s!", RED))
         # Log failure details
         with open(log_file_path, "a") as log_file:
              log_file.write(f"\n[TIMEOUT] {description}\n")
              log_file.write(f"Partial STDOUT:\n{e.stdout}\n")
              log_file.write(f"Partial STDERR:\n{e.stderr}\n")
 
-        print(f"  See {log_file_path} for details.")
         results.setdefault(base, []).append(f"❌ {description} timed out ({timeout}s)")
+        results.setdefault(base, []).append(f"   log: {log_file_path}")
         return None
 
     except subprocess.CalledProcessError as e:
-        print(colored(f"[ERROR] {description} failed!", RED))
-        
         with open(log_file_path, "a") as log_file:
              log_file.write(f"\n[FAILED] {description}\n")
              log_file.write(f"Return Code: {e.returncode}\n")
              log_file.write(f"STDOUT:\n{e.stdout}\n")
              log_file.write(f"STDERR:\n{e.stderr}\n")
-             
-        print(f"  See {log_file_path} for details.")
+
         results.setdefault(base, []).append(f"❌ {description}")
+        results.setdefault(base, []).append(f"   log: {log_file_path}")
         return None
     except Exception as e:
-         print(colored(f"[ERROR] {description} unexpected error: {e}", RED))
          results.setdefault(base, []).append(f"❌ {description} error: {e}")
          return None
 
 def clean_all():
     """Run make clean for all components"""
-    print("[INFO] Cleaning all components...\n")
+    status_line("SETUP", "clean toolchain")
     clean_dir = case_dir("CLEAN")
     run_step(["make", "-C", str(MYLANGCOMPILER_DIR), "clean"], "Clean MyLangCompiler", "CLEAN", out_dir=clean_dir)
     run_step(["make", "-C", str(MYASSEMBLER_DIR), "clean"], "Clean MyAssembler", "CLEAN", out_dir=clean_dir)
@@ -152,7 +155,7 @@ def clean_all():
 
 def build_all():
     """Build all components in parallel"""
-    print("[INFO] Building all components...\n")
+    status_line("SETUP", "build toolchain")
 
     build_commands = [
         (["make", "-C", str(MYLANGCOMPILER_DIR), "all"], "Build MyLangCompiler"),
@@ -168,7 +171,7 @@ def build_all():
         }
         for future in futures:
             if future.result() is None:
-                print(f"[FATAL] {futures[future]} failed. Exiting.")
+                status_line("FATAL", f"{futures[future]} failed", RED)
                 sys.exit(1)
 
 
@@ -200,7 +203,8 @@ def run_test(basename, sources, reg, expected):
 
     # Run Emulator and capture output
     emu_cmd = [str(EMU_PATH), "-i", str(bin_path), "--reg", reg]
-    print(colored(f"[INFO] Next: emulator command for {basename}", YELLOW), " ".join(emu_cmd))
+    if VERBOSE:
+        status_line("EMU", " ".join(emu_cmd), YELLOW)
     output = run_step(emu_cmd, f"Run Emulator: {basename}.mbin", basename, timeout=EMU_TIMEOUT_SEC, out_dir=test_dir)
 
     if os.path.exists("memory_dump.txt"):
@@ -229,7 +233,7 @@ def run_test(basename, sources, reg, expected):
 
 def run_tests(selected=None):
     """Run selected test cases in parallel (or all if not specified)"""
-    print("\n[INFO] Running tests...\n")
+    status_line("RUN", f"{1 if selected else len(testcases)} case(s)" if selected else f"{len(testcases)} case(s)")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if selected:
@@ -245,36 +249,47 @@ def run_tests(selected=None):
     for t in to_run:
         run_test(*t)
 
-    print("\n====== TEST SUMMARY ======")
+    passed = 0
+    failed = 0
     failures = []
-    successes = []
 
     for name in sorted(results.keys()):
-        bucket = failures if has_failure(results[name]) else successes
-        bucket.append((name, results[name]))
-
-    for name, outcomes in successes:
-        print(f"[{name}]")
-        for outcome in outcomes:
-            print(f"  {outcome}")
+        if has_failure(results[name]):
+            failed += 1
+            failures.append((name, results[name]))
+        else:
+            passed += 1
+            success_msg = next((outcome for outcome in results[name] if outcome.startswith("✅")), "✅ PASS")
+            detail = success_msg.removeprefix("✅ ").strip()
+            status_line("PASS", f"{name} {detail}", GREEN)
 
     if failures:
-        if successes:
-            print()
-        print("-- Failures (bottom) --")
         for name, outcomes in failures:
-            print(f"[{name}]")
+            summary = next((outcome for outcome in outcomes if outcome.startswith("❌")), "❌ failed")
+            status_line("FAIL", f"{name} {summary.removeprefix('❌ ').strip()}", RED)
+            if VERBOSE:
+                continue
             for outcome in outcomes:
+                if outcome.startswith("✅"):
+                    continue
                 print(f"  {outcome}")
-        print(f"Failed cases: {', '.join(name for name, _ in failures)}")
-    print("==========================")
+
+    summary = f"Summary: {passed} passed, {failed} failed"
+    status_line("DONE", summary, GREEN if failed == 0 else YELLOW)
+    if failures:
+        print("Failed cases:", ", ".join(name for name, _ in failures))
 
 if __name__ == "__main__":
-    # If an argument is given, filter to that test
-    if len(sys.argv) >= 2:
-        filename = sys.argv[1]
-        base, ext = os.path.splitext(filename)
-        basename = base if ext else filename
+    parser = argparse.ArgumentParser(description="Run MyLang compiler integration tests.")
+    parser.add_argument("test", nargs="?", help="Optional test case name or source filename")
+    parser.add_argument("--verbose", action="store_true", help="Show step-by-step command progress")
+    args = parser.parse_args()
+
+    VERBOSE = args.verbose
+
+    if args.test:
+        base, ext = os.path.splitext(args.test)
+        basename = base if ext else args.test
     else:
         basename = None
 
