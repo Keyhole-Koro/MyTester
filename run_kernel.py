@@ -21,16 +21,40 @@ from tools.project_paths import (
     REPO_ROOT,
 )
 
+GREEN = "32"
+RED = "31"
+YELLOW = "33"
+CYAN = "36"
+VERBOSE = False
 
-def run(cmd, cwd):
-    print(f"+ {' '.join(str(c) for c in cmd)}")
-    subprocess.check_call(cmd, cwd=cwd)
+def colored(text, color_code):
+    return f"\033[{color_code}m{text}\033[0m"
+
+def status_line(label, message, color=CYAN):
+    print(colored(f"[{label}]", color), message)
+
+def run(cmd, cwd, description):
+    if VERBOSE:
+        status_line("RUN", " ".join(str(c) for c in cmd), CYAN)
+    else:
+        status_line("STEP", description, CYAN)
+    try:
+        subprocess.check_call(cmd, cwd=cwd)
+    except subprocess.CalledProcessError:
+        status_line("FAIL", description, RED)
+        raise
+    if VERBOSE:
+        status_line("OK", description, GREEN)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Build and run MyKernel sample.")
     parser.add_argument("--no-run", action="store_true", help="Build only; skip emulator run.")
+    parser.add_argument("--verbose", action="store_true", help="Show executed commands")
     args = parser.parse_args()
+
+    global VERBOSE
+    VERBOSE = args.verbose
 
     repo = REPO_ROOT
     kernel_dir = MYKERNEL_DIR
@@ -59,20 +83,20 @@ def main():
         stub_masm, kernel_ml,
         "-o", linked_bin,
         "--build-dir", build_dir
-    ], cwd=repo)
+    ], cwd=repo, description="build kernel image")
 
     # Ensure ROM image exists
     boot_rom_bin.parent.mkdir(parents=True, exist_ok=True)
     if not boot_rom_bin.exists():
-        run([myas, boot_rom_src, boot_rom_bin], cwd=repo)
+        run([myas, boot_rom_src, boot_rom_bin], cwd=repo, description="build boot ROM")
 
     if args.no_run:
-        print("Build complete; skipping emulator run (--no-run).")
+        status_line("DONE", "build complete; skipped emulator run", GREEN)
         return
 
     # Run emulator
-    run([myemu, "--rom", boot_rom_bin, "--ram", linked_bin], cwd=repo)
-    print("Done. See memory_dump.txt for RAM snapshot and emulator output above.")
+    run([myemu, "--rom", boot_rom_bin, "--ram", linked_bin], cwd=repo, description="run emulator")
+    status_line("DONE", "kernel run complete; see memory_dump.txt for RAM snapshot", GREEN)
 
 
 if __name__ == "__main__":
