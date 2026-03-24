@@ -5,14 +5,25 @@ import subprocess
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-ROOT_DIR = Path(__file__).parent.parent.resolve()
-INPUT_DIR = ROOT_DIR / "MyTester/inputs"
-OUTPUT_DIR = ROOT_DIR / "MyTester/outputs"
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-CC_PATH = ROOT_DIR / "MyLangCompiler/mlc"
-ASM_PATH = ROOT_DIR / "MyAssembler/build/myas"
-LINKER_PATH = ROOT_DIR / "MyLinker/mllinker"
-EMU_PATH = ROOT_DIR / "MyEmulator/build/myemu"
+from tools.project_paths import (
+    MYASSEMBLER_DIR,
+    MYEMULATOR_DIR,
+    MYLANGCOMPILER_DIR,
+    MYLINKER_DIR,
+    MYTESTER_DIR,
+    REPO_ROOT,
+)
+
+ROOT_DIR = REPO_ROOT
+INPUT_DIR = MYTESTER_DIR / "inputs"
+OUTPUT_DIR = MYTESTER_DIR / "outputs"
+
+CC_PATH = MYLANGCOMPILER_DIR / "mlc"
+ASM_PATH = MYASSEMBLER_DIR / "build/myas"
+LINKER_PATH = MYLINKER_DIR / "mllinker"
+EMU_PATH = MYEMULATOR_DIR / "build/myemu"
 EMU_TIMEOUT_SEC = float(os.environ.get("EMU_TIMEOUT_SEC", "8"))
 
 # Test cases: (basename, sources list, register to check, expected value)
@@ -134,20 +145,20 @@ def clean_all():
     """Run make clean for all components"""
     print("[INFO] Cleaning all components...\n")
     clean_dir = case_dir("CLEAN")
-    run_step(["make", "-C", str(ROOT_DIR / "MyLangCompiler"), "clean"], "Clean MyLangCompiler", "CLEAN", out_dir=clean_dir)
-    run_step(["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean"], "Clean MyAssembler", "CLEAN", out_dir=clean_dir)
-    run_step(["make", "-C", str(ROOT_DIR / "MyLinker"), "clean"], "Clean MyLinker", "CLEAN", out_dir=clean_dir)
-    run_step(["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean"], "Clean MyEmulator", "CLEAN", out_dir=clean_dir)
+    run_step(["make", "-C", str(MYLANGCOMPILER_DIR), "clean"], "Clean MyLangCompiler", "CLEAN", out_dir=clean_dir)
+    run_step(["make", "-C", str(MYASSEMBLER_DIR), "clean"], "Clean MyAssembler", "CLEAN", out_dir=clean_dir)
+    run_step(["make", "-C", str(MYLINKER_DIR), "clean"], "Clean MyLinker", "CLEAN", out_dir=clean_dir)
+    run_step(["make", "-C", str(MYEMULATOR_DIR), "clean"], "Clean MyEmulator", "CLEAN", out_dir=clean_dir)
 
 def build_all():
     """Build all components in parallel"""
     print("[INFO] Building all components...\n")
 
     build_commands = [
-        (["make", "-C", str(ROOT_DIR / "MyLangCompiler"), "all"], "Build MyLangCompiler"),
-        (["make", "-C", str(ROOT_DIR / "MyAssembler"), "all"], "Build MyAssembler"),
-        (["make", "-C", str(ROOT_DIR / "MyLinker"), "all"], "Build MyLinker"),
-        (["make", "-C", str(ROOT_DIR / "MyEmulator"), "all"], "Build MyEmulator"),
+        (["make", "-C", str(MYLANGCOMPILER_DIR), "all"], "Build MyLangCompiler"),
+        (["make", "-C", str(MYASSEMBLER_DIR), "all"], "Build MyAssembler"),
+        (["make", "-C", str(MYLINKER_DIR), "all"], "Build MyLinker"),
+        (["make", "-C", str(MYEMULATOR_DIR), "all"], "Build MyEmulator"),
     ]
 
     with ThreadPoolExecutor() as executor:

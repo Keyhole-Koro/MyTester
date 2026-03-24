@@ -4,12 +4,16 @@ import subprocess
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-ROOT_DIR = Path("/workspaces/MyComputer")
-INPUT_DIR = ROOT_DIR / "MyTester/inputs"
-OUTPUT_DIR = ROOT_DIR / "MyTester/outputs"
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-ASM_PATH = ROOT_DIR / "MyAssembler/build/myas"
-EMU_PATH = ROOT_DIR / "MyEmulator/build/myemu"
+from tools.project_paths import MYASSEMBLER_DIR, MYEMULATOR_DIR, MYTESTER_DIR, REPO_ROOT
+
+ROOT_DIR = REPO_ROOT
+INPUT_DIR = MYTESTER_DIR / "inputs"
+OUTPUT_DIR = MYTESTER_DIR / "outputs"
+
+ASM_PATH = MYASSEMBLER_DIR / "build/myas"
+EMU_PATH = MYEMULATOR_DIR / "build/myemu"
 
 # Test cases: (asm file basename, register to check, expected value)
 testcases = [
@@ -57,15 +61,15 @@ def run_step(command, description, base):
 def clean_all():
     """Run make clean for all components"""
     print("[INFO] Cleaning all components...\n")
-    run_step(["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean"], "Clean MyAssembler", "CLEAN")
-    run_step(["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean"], "Clean MyEmulator", "CLEAN")
+    run_step(["make", "-C", str(MYASSEMBLER_DIR), "clean"], "Clean MyAssembler", "CLEAN")
+    run_step(["make", "-C", str(MYEMULATOR_DIR), "clean"], "Clean MyEmulator", "CLEAN")
 
 def build_all():
     """Build all components in parallel"""
     print("[INFO] Building all components...\n")
     build_commands = [
-        (["make", "-C", str(ROOT_DIR / "MyAssembler"), "clean", "all"], "Build MyAssembler"),
-        (["make", "-C", str(ROOT_DIR / "MyEmulator"), "clean", "all"], "Build MyEmulator"),
+        (["make", "-C", str(MYASSEMBLER_DIR), "clean", "all"], "Build MyAssembler"),
+        (["make", "-C", str(MYEMULATOR_DIR), "clean", "all"], "Build MyEmulator"),
     ]
     with ThreadPoolExecutor() as executor:
         futures = [

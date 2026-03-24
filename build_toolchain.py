@@ -10,6 +10,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.project_paths import MYASSEMBLER_DIR, MYLANGCOMPILER_DIR, MYLINKER_DIR, REPO_ROOT
+
 
 def run(cmd, cwd=None):
     print("+ " + " ".join(str(c) for c in cmd))
@@ -92,10 +98,10 @@ def main():
     parser.add_argument("--clean", action="store_true", help="Clean build directory before build")
     args = parser.parse_args()
 
-    repo = Path(__file__).resolve().parent.parent
-    mlc = repo / "MyLangCompiler" / "mlc"
-    myas = repo / "MyAssembler" / "build" / "myas"
-    mllinker = repo / "MyLinker" / "mllinker"
+    repo = REPO_ROOT
+    mlc = MYLANGCOMPILER_DIR / "mlc"
+    myas = MYASSEMBLER_DIR / "build" / "myas"
+    mllinker = MYLINKER_DIR / "mllinker"
 
     out_path = Path(args.out).resolve()
     build_dir = Path(args.build_dir).resolve() if args.build_dir else out_path.parent.resolve()

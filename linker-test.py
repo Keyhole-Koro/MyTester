@@ -3,9 +3,13 @@ import sys
 import subprocess
 from pathlib import Path
 
-ROOT_DIR = Path("/workspaces/MyComputer")
-INPUT_DIR = ROOT_DIR / "MyTester/inputs/linker"
-OUTPUT_DIR = ROOT_DIR / "MyTester/outputs/linker"
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.project_paths import MYTESTER_DIR, REPO_ROOT
+
+ROOT_DIR = REPO_ROOT
+INPUT_DIR = MYTESTER_DIR / "inputs/linker"
+OUTPUT_DIR = MYTESTER_DIR / "outputs/linker"
 
 LINKER_DIR = ROOT_DIR / "MyLangLinker"
 LINKER_EXE = LINKER_DIR / "mllinker"
