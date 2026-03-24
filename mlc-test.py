@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-ROOT_DIR = Path("/workspaces/MyComputer")
+ROOT_DIR = Path(__file__).parent.parent.resolve()
 INPUT_DIR = ROOT_DIR / "MyTester/inputs"
 OUTPUT_DIR = ROOT_DIR / "MyTester/outputs"
 
