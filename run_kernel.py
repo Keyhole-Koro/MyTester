@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build and run the sample kernel from MyKernel using the toolchain:
-  .ml -> .masm (mlc) -> .mbin/.mobj (myas) -> linked .mbin (mllinker) -> run (myemu)
+  .mln -> .masm (mlc) -> .mbin/.mobj (myas) -> linked .mbin (mllinker) -> run (myemu)
 """
 
 import argparse
@@ -68,7 +68,7 @@ def main():
     myemu = MYEMULATOR_DIR / "build" / "myemu"
 
     # Sources
-    kernel_ml = kernel_dir / "src" / "kernel_main.ml"
+    kernel_ml = kernel_dir / "src" / "kernel_main.mln"
     stub_masm = kernel_dir / "asm" / "stub.masm"
 
     linked_bin = build_dir / "kernel_linked.mbin"

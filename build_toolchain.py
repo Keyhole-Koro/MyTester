@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build pipeline tool: .ml -> .masm (mlc) -> .mobj (myas) -> linked .mbin (mllinker)
+Build pipeline tool: .mln -> .masm (mlc) -> .mobj (myas) -> linked .mbin (mllinker)
 Supports recursive source discovery with exclusions.
 """
 
@@ -70,13 +70,13 @@ def collect_sources(paths, excludes, include_masm):
                     if should_exclude(rel_file, excludes):
                         continue
                     fpath = root_path / name
-                    if fpath.suffix == ".ml":
+                    if fpath.suffix == ".mln":
                         sources.append((fpath, Path(rel_file), "ml"))
                     elif fpath.suffix == ".masm" and include_masm:
                         sources.append((fpath, Path(rel_file), "masm"))
         else:
             rel_name = p.name
-            if p.suffix == ".ml":
+            if p.suffix == ".mln":
                 sources.append((p, Path(rel_name), "ml"))
             elif p.suffix == ".masm":
                 sources.append((p, Path(rel_name), "masm"))
@@ -88,7 +88,7 @@ def collect_sources(paths, excludes, include_masm):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build .ml + .masm sources into a linked .mbin via mlc/myas/mllinker.")
+        description="Build .mln + .masm sources into a linked .mbin via mlc/myas/mllinker.")
     parser.add_argument("sources", nargs="+", help="Source files or directories")
     parser.add_argument("-o", "--out", required=True, help="Output linked .mbin path")
     parser.add_argument("--build-dir", help="Directory for intermediate outputs")
