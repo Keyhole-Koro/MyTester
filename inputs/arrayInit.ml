@@ -1,5 +1,5 @@
-int main() {
+i32 main() {
 char name[] = "hi";
-int nums[3] = {1, 2, 3};
+i32 nums[3] = {1, 2, 3};
 return nums[0] + name[1];
 }

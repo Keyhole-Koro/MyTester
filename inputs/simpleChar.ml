@@ -1,5 +1,5 @@
 
-int main() {
+i32 main() {
 char *hello = "Hello";
 
 char c = 'X';

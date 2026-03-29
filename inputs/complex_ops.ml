@@ -1,16 +1,16 @@
-int fib(int n) {
+i32 fib(i32 n) {
 if (n <= 1) return n;
 return fib(n-1) + fib(n-2);
 }
 
-int factorial(int n) {
+i32 factorial(i32 n) {
 if (n == 0) return 1;
 return n * factorial(n - 1);
 }
 
-int main() {
-int sum = 0;
-int i;
+i32 main() {
+i32 sum = 0;
+i32 i;
 
 // Test for loop and recursion (fib)
 for (i = 0; i < 10; i++) {
@@ -22,9 +22,9 @@ sum = sum + fib(i);
 }
 
 // Test logic and simple if
-int x = 10;
-int y = 20;
-int z = 0;
+i32 x = 10;
+i32 y = 20;
+i32 z = 0;
 if (x < y && y > 15) {
 z = 1;
 } else {
@@ -32,20 +32,20 @@ z = 0;
 }
 
 // Test while loop
-int count = 0;
+i32 count = 0;
 while (count < 5) {
 sum = sum + 1;
 count++;
 }
 
 // Test another recursion (factorial)
-int f = factorial(5); // 120
+i32 f = factorial(5); // 120
 if (f == 120) {
 z = z + 1; // z becomes 2 if logic passed
 }
 
 // arithmetic complexity
-int complex_math = (x * y + f) / (z + 1);
+i32 complex_math = (x * y + f) / (z + 1);
 
 return sum + z + complex_math;
 }

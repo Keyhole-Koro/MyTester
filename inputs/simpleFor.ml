@@ -1,14 +1,14 @@
-int main() {
-int x = 2;
-int y = 3;
+i32 main() {
+i32 x = 2;
+i32 y = 3;
 
-for (int i = 0; i < 20; i++) {
+for (i32 i = 0; i < 20; i++) {
 x++;
 if (x > 10)
 break;
 } // 11
 
-for (int i = 10; i > 0; i--) {
+for (i32 i = 10; i > 0; i--) {
 if (i == 6)
 continue;
 y--;

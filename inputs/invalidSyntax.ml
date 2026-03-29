@@ -1,4 +1,4 @@
-int main() {
-int a = 1  // missing semicolon triggers parse error
+i32 main() {
+i32 a = 1  // missing semicolon triggers parse error
 return a;
 }

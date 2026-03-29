@@ -1,7 +1,7 @@
-int g_a = 42;
+i32 g_a = 42;
 char g_b = 'Z';
 
-int main() {
+i32 main() {
   if (g_b != 'Z') return 1;
   return g_a;
 }

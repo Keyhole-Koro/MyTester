@@ -1,4 +1,4 @@
-int main() {
-int a[2][3];
+i32 main() {
+i32 a[2][3];
 return sizeof(a);
 }

@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import argparse
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -37,6 +37,7 @@ testcases = [
     ("simpleWhile", ["simpleWhile.ml"], "R1", 15),
     ("complexWhile", ["complexWhile.ml"], "R1", 16),
     ("simpleChar", ["simpleChar.ml"], "R1", 72),
+    ("intWidth32", ["intWidth32.ml"], "R1", 20),
     ("simpleStruct", ["simpleStruct.ml"], "R1", 10),
     ("arrayInit", ["arrayInit.ml"], "R1", 106),
     ("multiArray", ["multiArray.ml"], "R1", 6),
@@ -94,11 +95,13 @@ def case_dir(base):
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-def run_step(command, description, base, timeout=None, out_dir=None):
+def run_step(command, description, base, timeout=None, out_dir=None, outcomes=None, cwd=None):
     """Run a subprocess and handle output/errors"""
     log_root = out_dir if out_dir else OUTPUT_DIR
     log_root.mkdir(parents=True, exist_ok=True)
     log_file_path = log_root / f"{base}.log"
+    if outcomes is None:
+        outcomes = results.setdefault(base, [])
     try:
         pretty = ' '.join(command)
         if VERBOSE:
@@ -109,7 +112,7 @@ def run_step(command, description, base, timeout=None, out_dir=None):
             log_file.write(f"\n--- {description} ---\nCommand: {pretty}\n")
             
             result = subprocess.run(
-                command, check=True, capture_output=True, text=True, timeout=timeout
+                command, check=True, capture_output=True, text=True, timeout=timeout, cwd=cwd
             )
             
             log_file.write(f"STDOUT:\n{result.stdout}\n")
@@ -126,8 +129,8 @@ def run_step(command, description, base, timeout=None, out_dir=None):
              log_file.write(f"Partial STDOUT:\n{e.stdout}\n")
              log_file.write(f"Partial STDERR:\n{e.stderr}\n")
 
-        results.setdefault(base, []).append(f"❌ {description} timed out ({timeout}s)")
-        results.setdefault(base, []).append(f"   log: {log_file_path}")
+        outcomes.append(f"❌ {description} timed out ({timeout}s)")
+        outcomes.append(f"   log: {log_file_path}")
         return None
 
     except subprocess.CalledProcessError as e:
@@ -137,11 +140,11 @@ def run_step(command, description, base, timeout=None, out_dir=None):
              log_file.write(f"STDOUT:\n{e.stdout}\n")
              log_file.write(f"STDERR:\n{e.stderr}\n")
 
-        results.setdefault(base, []).append(f"❌ {description}")
-        results.setdefault(base, []).append(f"   log: {log_file_path}")
+        outcomes.append(f"❌ {description}")
+        outcomes.append(f"   log: {log_file_path}")
         return None
     except Exception as e:
-         results.setdefault(base, []).append(f"❌ {description} error: {e}")
+         outcomes.append(f"❌ {description} error: {e}")
          return None
 
 def clean_all():
@@ -180,8 +183,7 @@ def run_test(basename, sources, reg, expected):
     test_dir = case_dir(basename)
     obj_paths = []
     bin_path = test_dir / f"{basename}.mbin"
-
-    results[basename] = []
+    outcomes = []
 
     for src in sources:
         src_path = INPUT_DIR / src
@@ -190,49 +192,49 @@ def run_test(basename, sources, reg, expected):
         bin_prelink_path = test_dir / f"{basename}__{stem}.prelink.mbin"
         obj_path = test_dir / f"{basename}__{stem}.mobj"
 
-        if run_step([str(CC_PATH), str(src_path), str(asm_path)], f"C to ASM: {src}", basename, out_dir=test_dir) is None:
-            return
+        if run_step([str(CC_PATH), str(src_path), str(asm_path)], f"C to ASM: {src}", basename, out_dir=test_dir, outcomes=outcomes, cwd=test_dir) is None:
+            return basename, outcomes
 
-        if run_step([str(ASM_PATH), str(asm_path), str(bin_prelink_path), "--obj", str(obj_path)], f"ASM to OBJ: {src}", basename, out_dir=test_dir) is None:
-            return
+        if run_step([str(ASM_PATH), str(asm_path), str(bin_prelink_path), "--obj", str(obj_path)], f"ASM to OBJ: {src}", basename, out_dir=test_dir, outcomes=outcomes, cwd=test_dir) is None:
+            return basename, outcomes
 
         obj_paths.append(str(obj_path))
 
-    if run_step([str(LINKER_PATH), str(bin_path)] + obj_paths, f"Link MOBJ to MBIN: {basename}", basename, out_dir=test_dir) is None:
-        return
+    if run_step([str(LINKER_PATH), str(bin_path)] + obj_paths, f"Link MOBJ to MBIN: {basename}", basename, out_dir=test_dir, outcomes=outcomes, cwd=test_dir) is None:
+        return basename, outcomes
 
     # Run Emulator and capture output
     emu_cmd = [str(EMU_PATH), "-i", str(bin_path), "--reg", reg]
     if VERBOSE:
         status_line("EMU", " ".join(emu_cmd), YELLOW)
-    output = run_step(emu_cmd, f"Run Emulator: {basename}.mbin", basename, timeout=EMU_TIMEOUT_SEC, out_dir=test_dir)
-
-    if os.path.exists("memory_dump.txt"):
-        shutil.move("memory_dump.txt", os.path.join(test_dir, "memory_dump.txt"))
+    output = run_step(emu_cmd, f"Run Emulator: {basename}.mbin", basename, timeout=EMU_TIMEOUT_SEC, out_dir=test_dir, outcomes=outcomes, cwd=test_dir)
 
     if output is None:
-        results[basename].append("❌ Emulator execution failed")
-        return
+        outcomes.append("❌ Emulator execution failed")
+        return basename, outcomes
 
     # Step 4: Parse register value
     lines = [line.strip() for line in output.splitlines() if line.strip()]
     if not lines:
-        results[basename].append("❌ No output from emulator")
-        return
+        outcomes.append("❌ No output from emulator")
+        return basename, outcomes
 
     try:
         # Accept decimal or hex (e.g., "0x1f")
         actual = int(lines[-1], 0)
         if actual == expected:
-            results[basename].append(f"✅ {reg} = {fmt_hex(actual)} (expected)")
+            outcomes.append(f"✅ {reg} = {fmt_hex(actual)} (expected)")
         else:
-            results[basename].append(f"❌ {reg} = {fmt_hex(actual)}, expected {fmt_hex(expected)}")
+            outcomes.append(f"❌ {reg} = {fmt_hex(actual)}, expected {fmt_hex(expected)}")
     except Exception as e:
-        results[basename].append(f"❌ Failed to parse reg value: '{lines[-1]}' ({e})")
+        outcomes.append(f"❌ Failed to parse reg value: '{lines[-1]}' ({e})")
+    return basename, outcomes
 
 
 def run_tests(selected=None):
     """Run selected test cases in parallel (or all if not specified)"""
+    global results
+    results = {}
     status_line("RUN", f"{1 if selected else len(testcases)} case(s)" if selected else f"{len(testcases)} case(s)")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -245,9 +247,12 @@ def run_tests(selected=None):
     else:
         to_run = testcases
 
-    # Run sequentially to avoid stdout buffering/timeouts when many emulators run.
-    for t in to_run:
-        run_test(*t)
+    max_workers = min(len(to_run), max(1, os.cpu_count() or 4), 8)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {executor.submit(run_test, *t): t[0] for t in to_run}
+        for future in as_completed(future_map):
+            name, outcomes = future.result()
+            results[name] = outcomes
 
     passed = 0
     failed = 0

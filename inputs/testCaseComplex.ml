@@ -1,10 +1,10 @@
 typedef struct {
-    int val;
+    i32 val;
 } Data;
 
 Data g_data;
 
-int get_val() {
+i32 get_val() {
     return 100;
 }
 
@@ -12,13 +12,13 @@ Data* get_ptr() {
     return &g_data;
 }
 
-int main() {
+i32 main() {
     g_data.val = 0;
     
-    int x = 0;
+    i32 x = 0;
     
     // 1. Function return value
-    int res1 = case x of {
+    i32 res1 = case x of {
         0 -> get_val();
         _ -> 0;
     };

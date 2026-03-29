@@ -1,5 +1,5 @@
 package shared;
 
-export int shared_add_two(int x) {
+export i32 shared_add_two(i32 x) {
     return x + 2;
 }

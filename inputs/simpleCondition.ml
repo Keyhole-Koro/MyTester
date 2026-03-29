@@ -1,5 +1,5 @@
-int test_eq(int a, int b) {
-int r = 0;
+i32 test_eq(i32 a, i32 b) {
+i32 r = 0;
 if (a == b) {
 r = 10;
 } else {
@@ -8,8 +8,8 @@ r = 11;
 return r;
 }
 
-int test_neq(int a, int b) {
-int r = 0;
+i32 test_neq(i32 a, i32 b) {
+i32 r = 0;
 if (a != b) {
 r = 20;
 } else {
@@ -18,8 +18,8 @@ r = 21;
 return r;
 }
 
-int test_lt(int a, int b) {
-int r = 0;
+i32 test_lt(i32 a, i32 b) {
+i32 r = 0;
 if (a < b) {
 r = 30;
 } else {
@@ -28,8 +28,8 @@ r = 31;
 return r;
 }
 
-int test_lte(int a, int b) {
-int r = 0;
+i32 test_lte(i32 a, i32 b) {
+i32 r = 0;
 if (a <= b) {
 r = 40;
 } else {
@@ -38,8 +38,8 @@ r = 41;
 return r;
 }
 
-int test_gt(int a, int b) {
-int r = 0;
+i32 test_gt(i32 a, i32 b) {
+i32 r = 0;
 if (a > b) {
 r = 50;
 } else {
@@ -48,8 +48,8 @@ r = 51;
 return r;
 }
 
-int test_gte(int a, int b) {
-int r = 0;
+i32 test_gte(i32 a, i32 b) {
+i32 r = 0;
 if (a >= b) {
 r = 60;
 } else {
@@ -58,27 +58,27 @@ r = 61;
 return r;
 }
 
-int add4(int a, int b, int c, int d) {
+i32 add4(i32 a, i32 b, i32 c, i32 d) {
 return a + b + c + d;
 }
 
-int main() {
-int x = 2;
-int y = 3;
+i32 main() {
+i32 x = 2;
+i32 y = 3;
 
-int eq  = test_eq(x, y);    // 11
+i32 eq  = test_eq(x, y);    // 11
 
-int neq = test_neq(x, y);   // 20
-int lt  = test_lt(x, y);    // 30
-int lte = test_lte(x, y);   // 40
-int gt  = test_gt(x, y);    // 51
-int gte = test_gte(x, y);   // 61
+i32 neq = test_neq(x, y);   // 20
+i32 lt  = test_lt(x, y);    // 30
+i32 lte = test_lte(x, y);   // 40
+i32 gt  = test_gt(x, y);    // 51
+i32 gte = test_gte(x, y);   // 61
 
 if (x > 9) {
 x = x + 1; // x becomes 3 (not taken)
 }
 
-int z = add4(x, y, 10, 100); // 2+3+10+100=115
+i32 z = add4(x, y, 10, 100); // 2+3+10+100=115
 
 // Optional: add all the results so the output is unique and you can verify!
 return eq+

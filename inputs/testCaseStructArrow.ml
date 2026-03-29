@@ -1,15 +1,15 @@
 typedef struct {
-    int val;
+    i32 val;
 } Data;
 
-int main() {
+i32 main() {
     Data d;
     Data *p;
     d.val = 42;
     p = &d;
     
-    int x = 1;
-    int res = case x of {
+    i32 x = 1;
+    i32 res = case x of {
         0 -> 0;
         1 -> p->val;
         _ -> -1;

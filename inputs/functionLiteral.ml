@@ -1,9 +1,9 @@
 
-int main() {
-    int adder = (int x) {
+i32 main() {
+    i32 adder = (i32 x) {
         return x + x;
     };
 
-    int v = adder(5);
+    i32 v = adder(5);
     return v;
 }

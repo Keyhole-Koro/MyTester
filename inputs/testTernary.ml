@@ -1,11 +1,11 @@
-int main() {
-int a = 3;
-int b = 5;
-int c = (a < b);
-int d = (a > b);
-int e = (a == 3) && (b == 5);
-int f = (a == 4) || (b == 5);
-int g = a < b ? a : b;
-int h = a > b ? 1 : 2;
+i32 main() {
+i32 a = 3;
+i32 b = 5;
+i32 c = (a < b);
+i32 d = (a > b);
+i32 e = (a == 3) && (b == 5);
+i32 f = (a == 4) || (b == 5);
+i32 g = a < b ? a : b;
+i32 h = a > b ? 1 : 2;
 return c + d + e + f + g + h;
 }

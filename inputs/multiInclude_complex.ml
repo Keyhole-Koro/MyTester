@@ -1,8 +1,8 @@
 package main;
 import midB;
 
-int main() {
-    int base = 5;
-    int result = midB.midB(base);
+i32 main() {
+    i32 base = 5;
+    i32 result = midB.midB(base);
     return result;
 }

@@ -1,17 +1,17 @@
 typedef struct {
-    int val;
+    i32 val;
 } Data;
 
 Data g_data;
 Data *addr_g_data;
 
-int main() {
+i32 main() {
     g_data.val = 10;
     addr_g_data = &g_data;
-    int x = 10;
+    i32 x = 10;
     
     // Case where key is a struct member access expression
-    int res = case x of {
+    i32 res = case x of {
         addr_g_data->val -> 100;
         _ -> 200;
     };

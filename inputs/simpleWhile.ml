@@ -1,6 +1,6 @@
-int main() {
-int sum = 0;
-int i = 1;
+i32 main() {
+i32 sum = 0;
+i32 i = 1;
 
 while (i <= 5) {
 sum = sum + i;  // sum += i;

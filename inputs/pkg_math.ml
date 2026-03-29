@@ -1,9 +1,9 @@
 package math;
 
-export int Add(int a, int b) {
+export i32 Add(i32 a, i32 b) {
     return a + b;
 }
 
-export int Mul(int a, int b) {
+export i32 Mul(i32 a, i32 b) {
     return a * b;
 }

@@ -1,18 +1,18 @@
 typedef struct {
-int x;
-int y;
+i32 x;
+i32 y;
 } Point;
 
-void translate(Point *p, int dx, int dy) {
+void translate(Point *p, i32 dx, i32 dy) {
 p->x = p->x + dx;
 p->y = p->y + dy;
 }
 
-int sum(Point *p) {
+i32 sum(Point *p) {
 return p->x + p->y;
 }
 
-int main() {
+i32 main() {
 Point p;
 p.x = 1;
 p.y = 2;

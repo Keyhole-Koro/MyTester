@@ -1,5 +1,5 @@
 package part2;
 
-export int add_pair(int a, int b) {
+export i32 add_pair(i32 a, i32 b) {
     return a + b;
 }

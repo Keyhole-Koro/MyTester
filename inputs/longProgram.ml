@@ -1,26 +1,26 @@
 typedef struct {
-int x;
-int y;
+i32 x;
+i32 y;
 } Pair;
 
-int add_pair(Pair *p, int dx, int dy) {
+i32 add_pair(Pair *p, i32 dx, i32 dy) {
 p->x = p->x + dx;
 p->y = p->y + dy;
 return p->x + p->y;
 }
 
-int triple(int v) {
+i32 triple(i32 v) {
 return v + v + v;
 }
 
-int main() {
+i32 main() {
 Pair p;
 p.x = 3;
 p.y = 7;
 
-int arr[6] = {1, 2, 3, 4, 5, 6};
+i32 arr[6] = {1, 2, 3, 4, 5, 6};
 
-int total = 0;
+i32 total = 0;
 total = total + arr[0] + arr[1] + arr[2] + arr[3] + arr[4] + arr[5]; // 21
 
 total = total + add_pair(&p, 2, -1); // p -> (5,6), add 11 (total 32)

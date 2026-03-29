@@ -1,9 +1,9 @@
-int main() {
-int a = 10;
-int b = -a;      // -10
-int c = 1;
-int d = c << 4;  // 16
-int e = d >> 2;  // 4
+i32 main() {
+i32 a = 10;
+i32 b = -a;      // -10
+i32 c = 1;
+i32 d = c << 4;  // 16
+i32 e = d >> 2;  // 4
 
 // -10 + 16 + 4 = 10
 return b + d + e;

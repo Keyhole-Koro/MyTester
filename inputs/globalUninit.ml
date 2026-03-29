@@ -1,8 +1,8 @@
-int g_i;
+i32 g_i;
 char g_c;
-int g_arr[3];
+i32 g_arr[3];
 
-int main() {
+i32 main() {
     if (g_i != 0) return 1;
     if (g_c != 0) return 2;
     if (g_arr[0] != 0) return 3;

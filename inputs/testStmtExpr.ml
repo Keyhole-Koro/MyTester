@@ -1,9 +1,9 @@
-int main() {
-    int var = ({
-        int a = 2;
-        int b = ({
-            int c = 1;
-            int d = 2;
+i32 main() {
+    i32 var = ({
+        i32 a = 2;
+        i32 b = ({
+            i32 c = 1;
+            i32 d = 2;
             yield c + d;
         });
         yield a + b;
