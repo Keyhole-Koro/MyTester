@@ -14,15 +14,15 @@ i32 main() {
     if (g_x != 10) return 1;
     if (g_y != -5) return 2;
     if (g_c != 'A') return 3;
-    
+
     // Modify globals
     i32 val = update_globals();
-    
+
     // Check modified values
     if (val != 5) return 4;
     if (g_x != 5) return 5;
     if (g_c != 'B') return 6;
-    
+
     // Test mixing char and i32 globals
     i32 res = g_d + g_x; // 100 + 5 = 105
     return res;

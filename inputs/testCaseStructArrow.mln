@@ -7,7 +7,7 @@ i32 main() {
     Data *p;
     d.val = 42;
     p = &d;
-    
+
     i32 x = 1;
     i32 res = case x of {
         0 -> 0;
